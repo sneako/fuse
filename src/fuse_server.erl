@@ -33,7 +33,6 @@
 
 -define(TAB, fuse_state).
 
--record(state, { fuses = [] }).
 -record(fuse, {
     name :: atom(),
     intensity :: integer(),
@@ -49,20 +48,20 @@
 
 %% ------
 %% @doc Start up the manager server for the fuse system
-%% This is assumed to be called by (@see fuse_sup). The `Timing' parameter controls how the system manages timing.
+%% This is assumed to be called by (@see fuse_server_sup). The `Timing' parameter controls how the system manages timing.
 %% @end
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
+%%
 %% ------
 %% @doc install/2 installs a new fuse into the running system
 %% Install a new fuse under `Name' with options given by `Opts'.
 %% We assume `Opts' are already in the right verified and validated format.
 %% @end
-install(Name, Opts) ->
+start_link(Name, Options) ->
     %% Assume options are already verified
     Fuse = init_state(Name, Opts),
-    gen_server:call(?MODULE, {install, Fuse}).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, Fuse, []).
+% TODO move handle_call install to init
+    % gen_server:call(?MODULE, {install, Fuse}).
 
 %% @doc ask/2 asks about the current given fuse state in a given context setting
 %% The documentation is (@see fuse:ask/1)
@@ -156,25 +155,23 @@ run(Name, Func, Context) ->
 %% -- CALLBACKS --------------------------------------------
 
 %% @private
-init([]) ->
+init(#fuse { name = Name } = F) ->
     _ = ets:new(?TAB, [named_table, protected, set, {read_concurrency, true}, {keypos, 1}]),
+
+            install_metrics(F),
+            fix(F),
+            {reply, ok, Name};
+        {value, OldFuse, _Otherfuses} ->
+            EF = F#fuse { enabled = OldFuse#fuse.enabled },
+            fix(EF),
+            _ = reset_timer(OldFuse), %% For effect only
+            %% Transplant the enabled-state from the old fuse
+            {reply, ok, State#state {
+                fuses = lists:keystore(Name, #fuse.name, Fs, EF) }}
+    end,
     {ok, #state{ }}.
 
 %% @private
-handle_call({install, #fuse { name = Name } = F}, _From, #state { fuses = Fs } = State) ->
-        case lists:keytake(Name, #fuse.name, Fs) of
-            false ->
-                install_metrics(F),
-                fix(F),
-                {reply, ok, State#state { fuses = lists:keystore(Name, #fuse.name, Fs, F)}};
-            {value, OldFuse, _Otherfuses} ->
-                EF = F#fuse { enabled = OldFuse#fuse.enabled },
-                fix(EF),
-                _ = reset_timer(OldFuse), %% For effect only
-                %% Transplant the enabled-state from the old fuse
-                {reply, ok, State#state {
-                    fuses = lists:keystore(Name, #fuse.name, Fs, EF) }}
-        end;
 handle_call({circuit, Name, Switch}, _From, State) ->
     {Reply, State2} = handle_circuit(Name, Switch, State),
     {reply, Reply, State2};

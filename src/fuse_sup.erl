@@ -26,7 +26,7 @@ start_link() ->
 init([]) ->
     Monitor = init_monitor(),
     {ok, { {rest_for_one, 5, 3600},
-           [?CHILD(fuse_server, []),
+           [?CHILD(fuse_server_sup, []),
             ?CHILD(fuse_event, [])] ++ Monitor }}.
 
 init_monitor() ->

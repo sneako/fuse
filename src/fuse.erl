@@ -43,7 +43,8 @@
       Reason :: any().
 install(Name, Options) ->
     options_ok(Options),
-    fuse_server:install(Name, Options).
+    %% TODO: allow reinstall, handle error if starting same child and restart it with new args
+    supervisor:start_child(fuse_server_sup, [Name, Options]).
 
 %% @doc Administratively disables a circuit.
 %% <p>This function is intended to be used administratively, when you want to break the fuse
