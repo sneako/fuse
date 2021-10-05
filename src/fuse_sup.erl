@@ -15,6 +15,9 @@
 -define(CHILD(I, Args), {I, {I, start_link, Args},
                              permanent, 5000, worker, [I]}).
 
+-define(CHILD_SUP(I, Args), {I, {I, start_link, Args},
+                             permanent, 5000, supervisor, [I]}).
+
 %% @doc Start the fuse supervisor
 %% @end
 -spec start_link() -> {ok, pid()}.
@@ -26,7 +29,7 @@ start_link() ->
 init([]) ->
     Monitor = init_monitor(),
     {ok, { {rest_for_one, 5, 3600},
-           [?CHILD(fuse_server_sup, []),
+           [?CHILD_SUP(fuse_server_sup, []),
             ?CHILD(fuse_event, [])] ++ Monitor }}.
 
 init_monitor() ->

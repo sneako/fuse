@@ -9,12 +9,11 @@
 
 
 %% Lifetime API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% Operational API
 -export([
     ask/2,
-    install/2,
     melt/1,
     remove/1,
     reset/1,
@@ -33,6 +32,7 @@
 
 -define(TAB, fuse_state).
 
+-record(state, { fuses = [] }).
 -record(fuse, {
     name :: atom(),
     intensity :: integer(),
@@ -56,12 +56,25 @@
 %% Install a new fuse under `Name' with options given by `Opts'.
 %% We assume `Opts' are already in the right verified and validated format.
 %% @end
-start_link(Name, Options) ->
+start_link(Name, Opts) ->
+        io:format("start"),
     %% Assume options are already verified
     Fuse = init_state(Name, Opts),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, Fuse, []).
+        io:format("start - fuse"),
+    case do_start(Fuse) of
+      {error,{already_started,Pid}} ->
+        io:format("start - already"),
+        Res = supervisor:terminate_child(fuse_server_sup, Pid),
+        io:format("terminate ~p~n", [Res]),
+        do_start(Fuse);
+      {ok, _} ->
+        ok
+    end.
 % TODO move handle_call install to init
     % gen_server:call(?MODULE, {install, Fuse}).
+    
+do_start(Fuse) ->
+  gen_server:start_link({local, ?MODULE}, ?MODULE, Fuse, []).
 
 %% @doc ask/2 asks about the current given fuse state in a given context setting
 %% The documentation is (@see fuse:ask/1)
@@ -157,19 +170,9 @@ run(Name, Func, Context) ->
 %% @private
 init(#fuse { name = Name } = F) ->
     _ = ets:new(?TAB, [named_table, protected, set, {read_concurrency, true}, {keypos, 1}]),
-
-            install_metrics(F),
-            fix(F),
-            {reply, ok, Name};
-        {value, OldFuse, _Otherfuses} ->
-            EF = F#fuse { enabled = OldFuse#fuse.enabled },
-            fix(EF),
-            _ = reset_timer(OldFuse), %% For effect only
-            %% Transplant the enabled-state from the old fuse
-            {reply, ok, State#state {
-                fuses = lists:keystore(Name, #fuse.name, Fs, EF) }}
-    end,
-    {ok, #state{ }}.
+    install_metrics(F),
+    fix(F),
+    {ok, Name}.
 
 %% @private
 handle_call({circuit, Name, Switch}, _From, State) ->

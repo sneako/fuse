@@ -3,6 +3,8 @@
 -module(fuse_server_sup).
 -behaviour(supervisor).
 
+-export([start_link/0]).
+
 %% Callbacks
 -export([init/1]).
 
