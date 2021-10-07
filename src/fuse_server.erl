@@ -112,7 +112,7 @@ circuit(Name, Switch) ->
 -spec melt(Name) -> ok
     when Name :: atom().
 melt(Name) ->
-    gen_server:call(?MODULE, {melt, Name}).
+    gen_server:cast(?MODULE, {melt, Name}).
 
 %% @doc remove/1 removes the fuse
 %% The documentation is (@see fuse:remove/1)
@@ -184,16 +184,6 @@ handle_call({reset, Name}, _From, State) ->
 handle_call({remove, Name}, _From, State) ->
     {Reply, State2} = handle_remove(Name, State),
     {reply, Reply, State2};
-handle_call({melt, Name}, _From, State) ->
-    Now = fuse_time:monotonic_time(),
-    {Res, State2} = with_fuse(Name, State, fun(F) -> add_restart(Now, F) end),
-    case Res of
-      ok ->
-            StatsPlugin = application:get_env(fuse, stats_plugin, fuse_stats_ets),
-            _ = StatsPlugin:increment(Name, melt),
-        {reply, ok, State2};
-      not_found -> {reply, ok, State2}
-    end;
 handle_call({ask, Name}, _F, State) ->
     {reply, ask_(Name), State};
 handle_call(sync, _F, State) ->
@@ -206,6 +196,16 @@ handle_call(_M, _F, State) ->
     {reply, {error, unknown}, State}.
 
 %% @private
+handle_cast({melt, Name}, State) ->
+    Now = fuse_time:monotonic_time(),
+    {Res, State2} = with_fuse(Name, State, fun(F) -> add_restart(Now, F) end),
+    case Res of
+      ok ->
+            StatsPlugin = application:get_env(fuse, stats_plugin, fuse_stats_ets),
+            _ = StatsPlugin:increment(Name, melt),
+        {noreply, State2};
+      not_found -> {noreply, State2}
+    end;
 handle_cast(_M, State) ->
     {noreply, State}.
 
